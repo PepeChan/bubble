@@ -1,8 +1,7 @@
 \ Basic graphics wordset
-bu:
-    import mo/pen    \ by doing this, the Pen module is available to Bubble with no extra work
-                     \ (and Draw inherits the imported Pen.)
-    idiom draw:
+import mo/pen        \ parent should also import the pen in order to use this package.
+bu: idiom draw:      \ do this first so early-out works
+import mo/pen        \ don't remove this.  parent may be different from bu:
 
 private:
     : push postpone >r ; immediate
@@ -14,19 +13,19 @@ public:
 create fore 4 cells allot
 : colorf  ( f: r g b a )  4sf 2swap fore 2v! fore 2 cells + 2v! ;
 : color   ( r g b a )  2af 2swap 2af fore 2v! fore 2 cells + 2v! ;
-: color@af  fore @+ swap @+ swap @+ swap @ ;
+: color@af  fore 4@ ;
 : color32   ( $AARRGGBB -- )  hex>color color ;
 
 \ Bitmaps, backbuffer
 : onto  pop  al_get_target_bitmap push  swap al_set_target_bitmap  call  pop al_set_target_bitmap ;
 : movebmp  ( src sx sy w h ) write-rgba blend>  at@ 0 al_draw_bitmap ;
-: bmp   ( w h -- bmp ) 2i al_create_bitmap ;
+: *bmp   ( w h -- bmp ) 2i al_create_bitmap ;
 : clearbmp  ( r g b a bmp )  onto 4af al_clear_to_color ;
 : backbuf  display al_get_backbuffer ;
 : loadbmp  zstring al_load_bitmap ;
 : savebmp  push zstring pop al_save_bitmap ;
-: subbmp   ( bmp w h ) at@ 2i 2swap 2i al_create_sub_bitmap ;
-: backdrop  backbuf onto  color@af al_clear_to_color ;
+\ : *subbmp   ( bmp w h ) at@ 2i 2swap 2i al_create_sub_bitmap ;
+: backdrop  color@af al_clear_to_color ;
 
 \ Predefined Colors
 fixed
@@ -58,32 +57,40 @@ fixed
 \  or use sub bitmaps (see subbmp).
 \  After each call to one of these words, the current color is reset to white.
 
-: drawf  ( bmp flip )  push  color@af  at@ 2af  pop al_draw_tinted_bitmap  white ;
-: rdrawf ( bmp ang flip )
+: blitf  ( bmp flip )  push  color@af  at@ 2af  pop al_draw_tinted_bitmap  white ;
+: >center  bmpwh 0.5 0.5 2* ;
+: crblitf ( bmp ang flip )
     locals| flip ang bmp |
-    bmp  color@af  0 0 ang 3af  flip  al_draw_tinted_rotated_bitmap  white ;
-: sdrawf  ( bmp dw dh flip )
-    locals| flip dh dw bmp |
-    bmp  color@af  0 0 bmp bmpwh 4af  at@ dw dh 4af  flip  al_draw_tinted_scaled_bitmap white ;
-: srdrawf ( bmp sx sy ang flip )
+    bmp  color@af  bmp >center  ang 3af  flip  al_draw_tinted_rotated_bitmap  white ;
+: sblitf  ( bmp dw dh flip )
+    locals| flip dh dw |
+    ( bmp )  color@af  at@ dw dh 4af  flip  al_draw_tinted_scaled_bitmap white ;
+: csrblitf ( bmp sx sy ang flip )
     locals| flip ang sy sx bmp |
-    bmp  0 0 bmp bmpwh 4af  color@af  0 0 at@ 4af  sx sy ang 3af  flip  al_draw_tinted_scaled_rotated_bitmap  white ;
-: udrawf  ( bmp scale flip )
+    bmp  color@af  bmp >center  at@  4af  sx sy ang 3af  flip  al_draw_tinted_scaled_rotated_bitmap  white ;
+: ublitf  ( bmp scale flip )
     locals| flip scale bmp |
-    bmp  color@af  0 0 bmp bmpwh 4af  at@ bmp bmpwh scale dup 2* 4af  flip  al_draw_tinted_scaled_bitmap  white ;
+    bmp  color@af  at@ bmp bmpwh scale dup 2* 4af  flip  al_draw_tinted_scaled_bitmap  white ;
 
-: draw   ( bmp ) 0 drawf ;
-: rdraw  ( bmp ang )  0 rdrawf ;
-: sdraw  ( bmp dw dh )  0 sdrawf ;
-: srdraw  ( bmp sx sy ang )  0 srdrawf ;
-: nudraw  ( bmp sx sy )  0 dup srdrawf ;
-: udraw  ( bmp scale )  0 udrawf ;
+: blit   ( bmp ) 0 blitf ;
+: crblit  ( bmp ang )  0 crblitf ;
+: sblit  ( bmp dw dh )  0 sblitf ;
+: csrblit  ( bmp sx sy ang )  0 csrblitf ;
+: nublit  ( bmp sx sy )  0 dup csrblitf ;  \ what does n stand for???
+: ublit  ( bmp scale )  0 ublitf ;
 
 \ Text
-variable fnt
-: text  ( str count -- )  zstring push  color@af fnt @ at@ 2af ALLEGRO_ALIGN_LEFT pop al_draw_text ;
-: rtext ( str count -- )  zstring push  color@af fnt @ at@ 2af ALLEGRO_ALIGN_RIGHT pop al_draw_text ;
-: ctext ( str count -- )  zstring push  color@af fnt @ at@ 2af ALLEGRO_ALIGN_CENTER pop al_draw_text ;
+variable fnt  default-font fnt ! 
+: fontw  z" A" al_get_text_width s>p ;
+: textw  ;
+: fonth  al_get_font_line_height s>p ;
+: aprint ( str count alignment -- )
+    -rot zstring >r  >r  fnt @ color@af at@ 2af r> r@ al_draw_text
+    fnt @ r> al_get_text_width s>p 0 +at ;
+: print  ( str count -- )  ALLEGRO_ALIGN_LEFT aprint ;
+: printr  ( str count -- )  ALLEGRO_ALIGN_RIGHT aprint ;
+: printc  ( str count -- )  ALLEGRO_ALIGN_CENTER aprint ;
+: font>  ( font -- <code> )  fnt !  r> call ;
 
 \ Primitives
 \ -1 = hairline thickness
